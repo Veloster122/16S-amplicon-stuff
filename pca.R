@@ -2,46 +2,35 @@
 library(readr)
 library(dplyr)
 library(ggplot2)
+library(tidyr)
+library(vegan) # For PCA
 
-# Step 1: Read the alpha diversity data from alpha-div.tsv
-alpha_div <- read.delim("alpha-div.tsv", sep = "\t", header = TRUE)
+# Read the beta diversity data from the provided file
+beta_div <- read.delim("beta-div.tsv", sep = "\t", header = TRUE)
 
-# Step 2: Prepare data for PCA
-# Identify the column that contains sample IDs (adjust if different)
-sample_id_col <- "group"  # Assuming the 'group' column contains sample IDs
-alpha_div_data <- alpha_div %>% select(where(is.numeric))
+# Prepare data for PCA
+# Extract the relevant columns for PCA
+beta_div_pca_data <- beta_div %>%
+  select(braycurtis, thetayc) # Select columns that are relevant for PCA
 
-# Step 2.1: Remove constant columns
-alpha_div_data <- alpha_div_data %>% select(where(~ n_distinct(.) > 1))
+# Perform PCA
+pca <- prcomp(beta_div_pca_data, center = TRUE, scale. = TRUE)
 
-# Step 2.2: Add classification column
-alpha_div <- alpha_div %>%
-  mutate(Group = case_when(
-    grepl("^Bph", group) ~ "Baleen",
-    grepl("^Bmu", group) ~ "Baleen",
-    grepl("^Pma", group) ~ "Toothed",
-    TRUE ~ "Unknown"  # Adjust as necessary
-  ))
+# Create a data frame with PCA results
+pca_df <- as.data.frame(pca$x)
+pca_df$group <- beta_div$comparison1 # Assuming 'comparison1' represents the sample IDs for grouping
 
-# Step 3: Perform PCA
-pca_result <- prcomp(alpha_div_data, center = TRUE, scale. = TRUE)
+# Define whale groups based on the sample IDs
+# You need to replace the 'comparison1' values with actual grouping logic
+# Here, it's assumed 'Bph' and 'Bmu' indicate baleen whales, and others indicate toothed whales
+pca_df$whale_group <- ifelse(grepl("^Bph|^Bmu", pca_df$group), "Baleen", "Toothed")
 
-# Step 4: Interpret PCA results
-summary(pca_result)
-
-# Step 5: Extract PCA scores and sample IDs
-pca_scores <- as.data.frame(pca_result$x)
-pca_scores$SampleID <- alpha_div[[sample_id_col]]
-
-# Step 5.1: Merge PCA scores with classification data
-pca_scores <- pca_scores %>% 
-  left_join(select(alpha_div, group, Group), by = c("SampleID" = "group"))
-
-# Step 6: Plot PCA results using ggplot2
-ggplot(pca_scores, aes(x = PC1, y = PC2, color = Group)) +
-  geom_point(size = 4) +
-  theme_minimal() +
-  labs(x = "PC1", y = "PC2", title = "PCA Plot of Alpha Diversity") +
-  theme(legend.position = "right") +
-  scale_color_manual(values = c("Baleen" = "blue", "Toothed" = "red"))
+# Plot PCA results
+ggplot(pca_df, aes(x = PC1, y = PC2, color = whale_group)) +
+  geom_point(size = 3) +
+  labs(title = "PCA of Beta Diversity Metrics",
+       x = "Principal Component 1",
+       y = "Principal Component 2",
+       color = "Whale Group") +
+  theme_minimal()
 
